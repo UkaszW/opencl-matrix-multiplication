@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		2BA68DDE227829E3009F1C18 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BA68DDD227829E3009F1C18 /* main.cpp */; };
 		2BA68DE522782AB1009F1C18 /* kernel.cl in Sources */ = {isa = PBXBuildFile; fileRef = 2BA68DE422782AB1009F1C18 /* kernel.cl */; };
+		2BA68DE722783DDD009F1C18 /* matrix_mul_kernel.cl in Sources */ = {isa = PBXBuildFile; fileRef = 2BA68DE622783DDD009F1C18 /* matrix_mul_kernel.cl */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -27,6 +28,7 @@
 		2BA68DDA227829E3009F1C18 /* opencl-matrix-multiplication */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "opencl-matrix-multiplication"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BA68DDD227829E3009F1C18 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		2BA68DE422782AB1009F1C18 /* kernel.cl */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.opencl; name = kernel.cl; path = "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/kernel.cl"; sourceTree = "<absolute>"; };
+		2BA68DE622783DDD009F1C18 /* matrix_mul_kernel.cl */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.opencl; name = matrix_mul_kernel.cl; path = "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/matrix_mul_kernel.cl"; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +63,7 @@
 			children = (
 				2BA68DDD227829E3009F1C18 /* main.cpp */,
 				2BA68DE422782AB1009F1C18 /* kernel.cl */,
+				2BA68DE622783DDD009F1C18 /* matrix_mul_kernel.cl */,
 			);
 			path = "opencl-matrix-multiplication";
 			sourceTree = "<group>";
@@ -121,6 +124,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2BA68DE722783DDD009F1C18 /* matrix_mul_kernel.cl in Sources */,
 				2BA68DDE227829E3009F1C18 /* main.cpp in Sources */,
 				2BA68DE522782AB1009F1C18 /* kernel.cl in Sources */,
 			);

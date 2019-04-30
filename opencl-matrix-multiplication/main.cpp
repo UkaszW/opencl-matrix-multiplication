@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <iostream>
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
@@ -16,6 +17,13 @@
 #endif
 
 #define CL_SILENCE_DEPRECATION
+
+#define WA 1024
+#define HA 1024
+#define WB 1024
+#define HB WA
+#define WC WB
+#define HC HA
 
 using namespace std;
 
@@ -115,9 +123,29 @@ float h_buf1[N];
 float h_buf2[N];
 float h_buf3[N];
 
+// Allocates a matrix with random float entries.
+void randomInit(float* data, int size)
+{
+    srand(0);
+    for (int i = 0; i < size; ++i)
+        data[i] = rand() / (float)RAND_MAX;
+}
+
+void identityMultipliedByCoeff(float* data, int width, float coeff)
+{
+    for (int i = 0; i <width*width; ++i)
+    {
+        data[i] = 0.0;
+    }
+    for (int i = 0; i < width; ++i)
+    {
+        data[i*width + i] = 1.0*coeff;
+    }
+}
+
 int main()
 {
-    char                str[1024];
+    char str[1024];
     size_t                size;
     cl_int                ret;
     cl_uint                tmp;
@@ -140,7 +168,27 @@ int main()
     size_t                num_of_locals;
     FILE*                fp;
     
-    fp = fopen( "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/kernel.cl", "r");
+    // 1. allocate host memory for matrices A and B
+    unsigned int size_A = WA * HA;
+    unsigned int mem_size_A = sizeof(float) * size_A;
+    float* h_A = (float*) malloc(mem_size_A);
+    
+    unsigned int size_B = WB * HB;
+    unsigned int mem_size_B = sizeof(float) * size_B;
+    float* h_B = (float*) malloc(mem_size_B);
+    
+    // 2. initialize host memory
+    //randomInit(h_A, size_A);
+    //randomInit(h_B, size_B);
+    identityMultipliedByCoeff(h_A, WA, 12.0);
+    identityMultipliedByCoeff(h_B, WB, -9.0);
+    
+    // 4. allocate host memory for the result C
+    unsigned int size_C = WC * HC;
+    unsigned int mem_size_C = sizeof(float) * size_C;
+    float* h_C = (float*) malloc(mem_size_C);
+    
+    fp = fopen( "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/matrix_mul_kernel.cl", "r");
     if (fp)
     {
         fseek(fp, 0, SEEK_END);
@@ -165,7 +213,7 @@ int main()
     checkCL(clGetPlatformInfo(platform_id, CL_PLATFORM_NAME, 1024, str, &size));
     cout << "Platform name      : " << str << endl;
     // Device info.
-    clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, &num_devices);
+    clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 2, &device_id, &num_devices);
     cl_device_type t;
     checkCL(clGetDeviceInfo(device_id, CL_DEVICE_TYPE, sizeof(t), &t, &size));
     if (t == CL_DEVICE_TYPE_CPU)
@@ -189,37 +237,70 @@ int main()
     checkCL(ret);
     command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
     checkCL(ret);
-    mem1 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    mem1 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, mem_size_A, h_A, &ret);
     checkCL(ret);
-    mem2 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    mem2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, mem_size_B, h_B, &ret);
     checkCL(ret);
-    mem3 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    mem3 = clCreateBuffer(context, CL_MEM_READ_WRITE, mem_size_C, NULL, &ret);
     checkCL(ret);
     program = clCreateProgramWithSource(context, 1, (const char**)&source_buf, (const size_t*)&source_size, &ret);
     checkCL(ret);
     checkCL(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
-    kernel = clCreateKernel(program, "addVectors", &ret);
+    kernel = clCreateKernel(program, "matrixMul", &ret);
     checkCL(ret);
     // Arguments
+    int wA = WA;
+    int wB = WB;
+    int wC = WC;
     checkCL(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&mem1));
     checkCL(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&mem2));
     checkCL(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&mem3));
+    checkCL(clSetKernelArg(kernel, 3, sizeof(int), (void *)&wA));
+    checkCL(clSetKernelArg(kernel, 4, sizeof(int), (void *)&wC));
     // Start kernel
-    num_of_locals = 512;
-    num_of_globals = N;
-    checkCL(clEnqueueWriteBuffer(command_queue, mem1, CL_TRUE, 0, sizeof(cl_float)*N, h_buf1, 0, NULL, NULL));
-    checkCL(clEnqueueWriteBuffer(command_queue, mem2, CL_TRUE, 0, sizeof(cl_float)*N, h_buf2, 0, NULL, NULL));
+    num_of_locals = 16;
+    num_of_globals = 1024;
     checkCL(clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &num_of_globals, &num_of_locals, 0, NULL, &time_event));
     /*checkCL(clWaitForEvents(1, &time_event));
     checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL));
     checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL));
     cout << "TT                 : " << (time_end - time_start) / 1000 << " us" << endl;
-     */
-    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0, sizeof(cl_float)*N, &h_buf3, 0, NULL, NULL));
+    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0,  mem_size_C, h_C, 0, NULL, NULL));
     for (int j = 0; j < N; j++) {
         printf("%f + %f = %f\n", h_buf1[j], h_buf2[j], h_buf3[j]);
     }
+    */
+    
+    // 8. Retrieve result from device
+    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0,  mem_size_C, h_C, 0, NULL, NULL));
+    
+    // We must check the result
+    for (int i = 0; i < WA; i++)
+    {
+        for (int j = 0; j < WA; j++)
+        {
+            float prod = 0;
+            for (int k = 0; k < WA;k++)
+            {
+                prod += h_A[i*WA + k] * h_B[k*WA + j];
+            }
+            if (fabs(h_C[i*WA+j] - prod) > 0.01)
+            {
+                printf("The indices where the comparison failed, i = %d, j = %d\n", i,j);
+                printf("C[i*WA+j] should equal %f\n", prod);
+                printf("C[i*WA+j] = %f\n", h_C[i*WA + j]);
+                perror("The matrix check has failed");
+                exit(1);
+                break;
+            }
+        }
+    }
+    printf("The matrix check has been successfull!\n");
+    
     // Finish
+    free(h_A);
+    free(h_B);
+    free(h_C);
     checkCL(clFlush(command_queue));
     checkCL(clFinish(command_queue));
     checkCL(clReleaseKernel(kernel));
