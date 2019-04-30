@@ -6,10 +6,229 @@
 //  Copyright © 2019 Łukasz Wójcik. All rights reserved.
 //
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <iostream>
+#ifdef __APPLE__
+#include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
 
-int main(int argc, const char * argv[]) {
-    // insert code here...
-    std::cout << "Hello, World!\n";
+#define CL_SILENCE_DEPRECATION
+
+using namespace std;
+
+//---------------------------------------------------
+
+const char *getErrorString(cl_int error)
+{
+    switch (error){
+            // run-time and JIT compiler errors
+        case  0: return "CL_SUCCESS";
+        case -1: return "CL_DEVICE_NOT_FOUND";
+        case -2: return "CL_DEVICE_NOT_AVAILABLE";
+        case -3: return "CL_COMPILER_NOT_AVAILABLE";
+        case -4: return "CL_MEM_OBJECT_ALLOCATION_FAILURE";
+        case -5: return "CL_OUT_OF_RESOURCES";
+        case -6: return "CL_OUT_OF_HOST_MEMORY";
+        case -7: return "CL_PROFILING_INFO_NOT_AVAILABLE";
+        case -8: return "CL_MEM_COPY_OVERLAP";
+        case -9: return "CL_IMAGE_FORMAT_MISMATCH";
+        case -10: return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
+        case -11: return "CL_BUILD_PROGRAM_FAILURE";
+        case -12: return "CL_MAP_FAILURE";
+        case -13: return "CL_MISALIGNED_SUB_BUFFER_OFFSET";
+        case -14: return "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST";
+        case -15: return "CL_COMPILE_PROGRAM_FAILURE";
+        case -16: return "CL_LINKER_NOT_AVAILABLE";
+        case -17: return "CL_LINK_PROGRAM_FAILURE";
+        case -18: return "CL_DEVICE_PARTITION_FAILED";
+        case -19: return "CL_KERNEL_ARG_INFO_NOT_AVAILABLE";
+            // compile-time errors
+        case -30: return "CL_INVALID_VALUE";
+        case -31: return "CL_INVALID_DEVICE_TYPE";
+        case -32: return "CL_INVALID_PLATFORM";
+        case -33: return "CL_INVALID_DEVICE";
+        case -34: return "CL_INVALID_CONTEXT";
+        case -35: return "CL_INVALID_QUEUE_PROPERTIES";
+        case -36: return "CL_INVALID_COMMAND_QUEUE";
+        case -37: return "CL_INVALID_HOST_PTR";
+        case -38: return "CL_INVALID_MEM_OBJECT";
+        case -39: return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";
+        case -40: return "CL_INVALID_IMAGE_SIZE";
+        case -41: return "CL_INVALID_SAMPLER";
+        case -42: return "CL_INVALID_BINARY";
+        case -43: return "CL_INVALID_BUILD_OPTIONS";
+        case -44: return "CL_INVALID_PROGRAM";
+        case -45: return "CL_INVALID_PROGRAM_EXECUTABLE";
+        case -46: return "CL_INVALID_KERNEL_NAME";
+        case -47: return "CL_INVALID_KERNEL_DEFINITION";
+        case -48: return "CL_INVALID_KERNEL";
+        case -49: return "CL_INVALID_ARG_INDEX";
+        case -50: return "CL_INVALID_ARG_VALUE";
+        case -51: return "CL_INVALID_ARG_SIZE";
+        case -52: return "CL_INVALID_KERNEL_ARGS";
+        case -53: return "CL_INVALID_WORK_DIMENSION";
+        case -54: return "CL_INVALID_WORK_GROUP_SIZE";
+        case -55: return "CL_INVALID_WORK_ITEM_SIZE";
+        case -56: return "CL_INVALID_GLOBAL_OFFSET";
+        case -57: return "CL_INVALID_EVENT_WAIT_LIST";
+        case -58: return "CL_INVALID_EVENT";
+        case -59: return "CL_INVALID_OPERATION";
+        case -60: return "CL_INVALID_GL_OBJECT";
+        case -61: return "CL_INVALID_BUFFER_SIZE";
+        case -62: return "CL_INVALID_MIP_LEVEL";
+        case -63: return "CL_INVALID_GLOBAL_WORK_SIZE";
+        case -64: return "CL_INVALID_PROPERTY";
+        case -65: return "CL_INVALID_IMAGE_DESCRIPTOR";
+        case -66: return "CL_INVALID_COMPILER_OPTIONS";
+        case -67: return "CL_INVALID_LINKER_OPTIONS";
+        case -68: return "CL_INVALID_DEVICE_PARTITION_COUNT";
+            // extension errors
+        case -1000: return "CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR";
+        case -1001: return "CL_PLATFORM_NOT_FOUND_KHR";
+        case -1002: return "CL_INVALID_D3D10_DEVICE_KHR";
+        case -1003: return "CL_INVALID_D3D10_RESOURCE_KHR";
+        case -1004: return "CL_D3D10_RESOURCE_ALREADY_ACQUIRED_KHR";
+        case -1005: return "CL_D3D10_RESOURCE_NOT_ACQUIRED_KHR";
+        default: return "Unknown OpenCL error";
+    }
+}
+
+char*  source_buf;
+size_t source_size;
+
+void checkCL(cl_int status)
+{
+    if (status != CL_SUCCESS)
+    {
+        cout << "OpenCL Error       : " << getErrorString(status) << endl;
+    }
+}
+
+//---------------------------------------------------
+
+const unsigned int N = 1024;
+
+float h_buf1[N];
+float h_buf2[N];
+float h_buf3[N];
+
+int main()
+{
+    char                str[1024];
+    size_t                size;
+    cl_int                ret;
+    cl_uint                tmp;
+    cl_ulong            utmp;
+    cl_ulong            time_end;
+    cl_ulong            time_start;
+    cl_uint                num_devices;
+    cl_uint                num_platforms;
+    cl_mem                mem1;
+    cl_mem                mem2;
+    cl_mem                mem3;
+    cl_event            time_event;
+    cl_kernel            kernel;
+    cl_context            context;
+    cl_program            program;
+    cl_device_id        device_id;
+    cl_platform_id        platform_id;
+    cl_command_queue    command_queue;
+    size_t                num_of_globals;
+    size_t                num_of_locals;
+    FILE*                fp;
+    
+    fp = fopen( "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/kernel.cl", "r");
+    if (fp)
+    {
+        fseek(fp, 0, SEEK_END);
+        source_size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        source_buf = (char*)malloc(source_size);
+        fread(source_buf, 1, source_size, fp);
+        fclose(fp);
+    } else {
+        fprintf(stderr, "Failed to load kernel.\n");
+        exit(1);
+    }
+    // Data prepare
+    for (int i = 0; i<N; i++)
+    {
+        h_buf1[i] = (float)i;
+        h_buf2[i] = (float)(N - i);
+    }
+    // Init
+    checkCL(clGetPlatformIDs(1, &platform_id, &num_platforms));
+    // Platform info.
+    checkCL(clGetPlatformInfo(platform_id, CL_PLATFORM_NAME, 1024, str, &size));
+    cout << "Platform name      : " << str << endl;
+    // Device info.
+    clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, &num_devices);
+    cl_device_type t;
+    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_TYPE, sizeof(t), &t, &size));
+    if (t == CL_DEVICE_TYPE_CPU)
+    {
+        cout << "Device type        : CPU" << endl;
+    }
+    if (t == CL_DEVICE_TYPE_GPU)
+    {
+        cout << "Device type        : GPU" << endl;
+    }
+    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(tmp), &tmp, &size));
+    cout << "Number of units    : " << tmp << endl;
+    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(utmp), &utmp, &size));
+    cout << "Max. memory alloc. : " << utmp / (1024 * 1024) << " MB" << endl;
+    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(utmp), &utmp, &size));
+    cout << "Global mem. size   : " << utmp / (1024 * 1024) << " MB" << endl;
+    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(tmp), &tmp, &size));
+    cout << "Clock frequency    : " << tmp << " MHz " << endl;
+    // ---
+    context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+    checkCL(ret);
+    command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
+    checkCL(ret);
+    mem1 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    checkCL(ret);
+    mem2 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    checkCL(ret);
+    mem3 = clCreateBuffer(context, CL_MEM_READ_WRITE, N*sizeof(float), NULL, &ret);
+    checkCL(ret);
+    program = clCreateProgramWithSource(context, 1, (const char**)&source_buf, (const size_t*)&source_size, &ret);
+    checkCL(ret);
+    checkCL(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
+    kernel = clCreateKernel(program, "addVectors", &ret);
+    checkCL(ret);
+    // Arguments
+    checkCL(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&mem1));
+    checkCL(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&mem2));
+    checkCL(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&mem3));
+    // Start kernel
+    num_of_locals = 512;
+    num_of_globals = N;
+    checkCL(clEnqueueWriteBuffer(command_queue, mem1, CL_TRUE, 0, sizeof(cl_float)*N, h_buf1, 0, NULL, NULL));
+    checkCL(clEnqueueWriteBuffer(command_queue, mem2, CL_TRUE, 0, sizeof(cl_float)*N, h_buf2, 0, NULL, NULL));
+    checkCL(clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &num_of_globals, &num_of_locals, 0, NULL, &time_event));
+    /*checkCL(clWaitForEvents(1, &time_event));
+    checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL));
+    checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL));
+    cout << "TT                 : " << (time_end - time_start) / 1000 << " us" << endl;
+     */
+    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0, sizeof(cl_float)*N, &h_buf3, 0, NULL, NULL));
+    for (int j = 0; j < N; j++) {
+        printf("%f + %f = %f\n", h_buf1[j], h_buf2[j], h_buf3[j]);
+    }
+    // Finish
+    checkCL(clFlush(command_queue));
+    checkCL(clFinish(command_queue));
+    checkCL(clReleaseKernel(kernel));
+    checkCL(clReleaseProgram(program));
+    checkCL(clReleaseMemObject(mem1));
+    checkCL(clReleaseMemObject(mem2));
+    checkCL(clReleaseMemObject(mem3));
+    checkCL(clReleaseCommandQueue(command_queue));
+    checkCL(clReleaseContext(context));
+    free(source_buf);
     return 0;
 }
