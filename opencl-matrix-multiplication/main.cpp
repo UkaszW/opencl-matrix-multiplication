@@ -27,7 +27,7 @@ fflush(NULL);\
 return 1; \
 }
 
-#define MATRIX_SIZE 512
+#define MATRIX_SIZE 1024
 
 #define MAX_SOURCE_SIZE (1000000)
 
@@ -71,25 +71,44 @@ int main(int argc, char** argv)
     } else {
         printf("Error: getting platfotm info \n");
     }
-    clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, num_entries, &device, &num_devices);
+    ret = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, num_entries, &device, &num_devices);
+    CHECK_STATUS(ret, "Error: getting device id");
     cl_device_type t;
-    clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(t), &t, &size);
-    if (t == CL_DEVICE_TYPE_CPU)
-    {
-        std::cout << "Device type        : CPU" << std::endl;
+    ret = clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(t), &t, &size);
+    if (ret == CL_SUCCESS) {
+        if (t == CL_DEVICE_TYPE_CPU) {
+            std::cout << "Device type        : CPU" << std::endl;
+        }
+        if (t == CL_DEVICE_TYPE_GPU) {
+            std::cout << "Device type        : GPU" << std::endl;
+        }
+    } else {
+        printf("Error: getting platfotm info \n");
     }
-    if (t == CL_DEVICE_TYPE_GPU)
-    {
-        std::cout << "Device type        : GPU" << std::endl;
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(tmp), &tmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Number of units    : " << tmp << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
     }
-    clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(tmp), &tmp, &size);
-    std::cout << "Number of units    : " << tmp << std::endl;
-    clGetDeviceInfo(device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(utmp), &utmp, &size);
-    std::cout << "Max. memory alloc. : " << utmp / (1024 * 1024) << " MB" << std::endl;
-    clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(utmp), &utmp, &size);
-    std::cout << "Global mem. size   : " << utmp / (1024 * 1024) << " MB" << std::endl;
-    clGetDeviceInfo(device, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(tmp), &tmp, &size);
-    std::cout << "Clock frequency    : " << tmp << " MHz " << std::endl;
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(utmp), &utmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Max. memory alloc. : " << utmp / (1024 * 1024) << " MB" << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(utmp), &utmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Global mem. size   : " << utmp / (1024 * 1024) << " MB" << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(tmp), &tmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Clock frequency    : " << tmp << " MHz " << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
     
     //----------------------------------------------------------------
     // creating context and Command Queue
@@ -151,7 +170,7 @@ int main(int argc, char** argv)
     
     // creating the buffer in the HOST,
     size_t dim =  numData;
-    size_t ldim = 8;
+    size_t ldim = 8; // for GPU best: 8 CPU: 1
     const size_t num_elem = dim*dim; //size of element
     cl_int *A_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
     cl_int *B_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
@@ -212,7 +231,7 @@ int main(int argc, char** argv)
     cl_uint dimension = 2;
     size_t global_work_size[2] = {dim, dim};
     size_t local_work_size[2] = {ldim, ldim};
-    ret = clEnqueueNDRangeKernel (cq, kernel, dimension , NULL, global_work_size, local_work_size,
+    ret = clEnqueueNDRangeKernel(cq, kernel, dimension , NULL, global_work_size, local_work_size,
                                   0, NULL, &event);
     if (ret != CL_SUCCESS) {
         printf("Error: Launching Kernel \n");
@@ -224,7 +243,7 @@ int main(int argc, char** argv)
         if (ret != CL_SUCCESS)    printf("Error: Waiting events \n");
         clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
         clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
-        std::cout << "Comuptation time                 : " << (time_end - time_start) / 1000 << " us" << std::endl;
+        std::cout << "\nComputation time   : " << (time_end - time_start) / 1000 << " us" << std::endl;
     }
     
     // finish the execution
