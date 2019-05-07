@@ -27,7 +27,8 @@ fflush(NULL);\
 return 1; \
 }
 
-#define MATRIX_SIZE 1024
+#define MATRIX_SIZE 1024 // matrix square dimension
+#define LOCAL_SIZE 8 // for GPU best: 8 CPU: 1
 
 #define MAX_SOURCE_SIZE (1000000)
 
@@ -170,7 +171,7 @@ int main(int argc, char** argv)
     
     // creating the buffer in the HOST,
     size_t dim =  numData;
-    size_t ldim = 8; // for GPU best: 8 CPU: 1
+    size_t ldim = LOCAL_SIZE;
     const size_t num_elem = dim*dim; //size of element
     cl_int *A_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
     cl_int *B_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
