@@ -8,120 +8,30 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <iostream>
+#include <time.h>
+#include <math.h>
+#include <string.h>
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #else
 #include <CL/cl.h>
 #endif
 
+#define CHECK_STATUS( status, message )   \
+if(status != CL_SUCCESS) \
+{ \
+printf( message); \
+printf( "\n ERR %d\n", status  ); \
+fflush(NULL);\
+return 1; \
+}
+
+#define MATRIX_SIZE 1024
+
+#define MAX_SOURCE_SIZE (1000000)
+
 #define CL_SILENCE_DEPRECATION
-
-#define WA 1024
-#define HA 1024
-#define WB 1024
-#define HB WA
-#define WC WB
-#define HC HA
-
-using namespace std;
-
-//---------------------------------------------------
-
-const char *getErrorString(cl_int error)
-{
-    switch (error){
-            // run-time and JIT compiler errors
-        case  0: return "CL_SUCCESS";
-        case -1: return "CL_DEVICE_NOT_FOUND";
-        case -2: return "CL_DEVICE_NOT_AVAILABLE";
-        case -3: return "CL_COMPILER_NOT_AVAILABLE";
-        case -4: return "CL_MEM_OBJECT_ALLOCATION_FAILURE";
-        case -5: return "CL_OUT_OF_RESOURCES";
-        case -6: return "CL_OUT_OF_HOST_MEMORY";
-        case -7: return "CL_PROFILING_INFO_NOT_AVAILABLE";
-        case -8: return "CL_MEM_COPY_OVERLAP";
-        case -9: return "CL_IMAGE_FORMAT_MISMATCH";
-        case -10: return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
-        case -11: return "CL_BUILD_PROGRAM_FAILURE";
-        case -12: return "CL_MAP_FAILURE";
-        case -13: return "CL_MISALIGNED_SUB_BUFFER_OFFSET";
-        case -14: return "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST";
-        case -15: return "CL_COMPILE_PROGRAM_FAILURE";
-        case -16: return "CL_LINKER_NOT_AVAILABLE";
-        case -17: return "CL_LINK_PROGRAM_FAILURE";
-        case -18: return "CL_DEVICE_PARTITION_FAILED";
-        case -19: return "CL_KERNEL_ARG_INFO_NOT_AVAILABLE";
-            // compile-time errors
-        case -30: return "CL_INVALID_VALUE";
-        case -31: return "CL_INVALID_DEVICE_TYPE";
-        case -32: return "CL_INVALID_PLATFORM";
-        case -33: return "CL_INVALID_DEVICE";
-        case -34: return "CL_INVALID_CONTEXT";
-        case -35: return "CL_INVALID_QUEUE_PROPERTIES";
-        case -36: return "CL_INVALID_COMMAND_QUEUE";
-        case -37: return "CL_INVALID_HOST_PTR";
-        case -38: return "CL_INVALID_MEM_OBJECT";
-        case -39: return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";
-        case -40: return "CL_INVALID_IMAGE_SIZE";
-        case -41: return "CL_INVALID_SAMPLER";
-        case -42: return "CL_INVALID_BINARY";
-        case -43: return "CL_INVALID_BUILD_OPTIONS";
-        case -44: return "CL_INVALID_PROGRAM";
-        case -45: return "CL_INVALID_PROGRAM_EXECUTABLE";
-        case -46: return "CL_INVALID_KERNEL_NAME";
-        case -47: return "CL_INVALID_KERNEL_DEFINITION";
-        case -48: return "CL_INVALID_KERNEL";
-        case -49: return "CL_INVALID_ARG_INDEX";
-        case -50: return "CL_INVALID_ARG_VALUE";
-        case -51: return "CL_INVALID_ARG_SIZE";
-        case -52: return "CL_INVALID_KERNEL_ARGS";
-        case -53: return "CL_INVALID_WORK_DIMENSION";
-        case -54: return "CL_INVALID_WORK_GROUP_SIZE";
-        case -55: return "CL_INVALID_WORK_ITEM_SIZE";
-        case -56: return "CL_INVALID_GLOBAL_OFFSET";
-        case -57: return "CL_INVALID_EVENT_WAIT_LIST";
-        case -58: return "CL_INVALID_EVENT";
-        case -59: return "CL_INVALID_OPERATION";
-        case -60: return "CL_INVALID_GL_OBJECT";
-        case -61: return "CL_INVALID_BUFFER_SIZE";
-        case -62: return "CL_INVALID_MIP_LEVEL";
-        case -63: return "CL_INVALID_GLOBAL_WORK_SIZE";
-        case -64: return "CL_INVALID_PROPERTY";
-        case -65: return "CL_INVALID_IMAGE_DESCRIPTOR";
-        case -66: return "CL_INVALID_COMPILER_OPTIONS";
-        case -67: return "CL_INVALID_LINKER_OPTIONS";
-        case -68: return "CL_INVALID_DEVICE_PARTITION_COUNT";
-            // extension errors
-        case -1000: return "CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR";
-        case -1001: return "CL_PLATFORM_NOT_FOUND_KHR";
-        case -1002: return "CL_INVALID_D3D10_DEVICE_KHR";
-        case -1003: return "CL_INVALID_D3D10_RESOURCE_KHR";
-        case -1004: return "CL_D3D10_RESOURCE_ALREADY_ACQUIRED_KHR";
-        case -1005: return "CL_D3D10_RESOURCE_NOT_ACQUIRED_KHR";
-        default: return "Unknown OpenCL error";
-    }
-}
-
-char*  source_buf;
-size_t source_size;
-
-void checkCL(cl_int status)
-{
-    if (status != CL_SUCCESS)
-    {
-        cout << "OpenCL Error       : " << getErrorString(status) << endl;
-    }
-}
-
-//---------------------------------------------------
-
-const unsigned int N = 1024;
-
-float h_buf1[N];
-float h_buf2[N];
-float h_buf3[N];
 
 // Allocates a matrix with random float entries.
 void randomInit(float* data, int size)
@@ -131,185 +41,253 @@ void randomInit(float* data, int size)
         data[i] = rand() / (float)RAND_MAX;
 }
 
-void identityMultipliedByCoeff(float* data, int width, float coeff)
+int main(int argc, char** argv)
 {
-    for (int i = 0; i <width*width; ++i)
-    {
-        data[i] = 0.0;
-    }
-    for (int i = 0; i < width; ++i)
-    {
-        data[i*width + i] = 1.0*coeff;
-    }
-}
-
-int main()
-{
+    //------------------------------------------------------------
+    //defining the input argument
+    //------------------------------------------------------------
+    cl_int numData = MATRIX_SIZE;
+    
+    printf("Matrix dimension : %d x %d : %d \n", numData, numData, numData*numData);
+    
+    //-------------------------------------------------------------
+    //first we have to get the platform we have in hand
+    //-------------------------------------------------------------
+    cl_int ret;
+    cl_platform_id platform = NULL;
+    cl_device_id device = NULL;
+    cl_uint num_platforms;
+    cl_uint num_entries = 1;
     char str[1024];
-    size_t                size;
-    cl_int                ret;
-    cl_uint                tmp;
-    cl_ulong            utmp;
-    cl_ulong            time_end;
-    cl_ulong            time_start;
-    cl_uint                num_devices;
-    cl_uint                num_platforms;
-    cl_mem                mem1;
-    cl_mem                mem2;
-    cl_mem                mem3;
-    cl_event            time_event;
-    cl_kernel            kernel;
-    cl_context            context;
-    cl_program            program;
-    cl_device_id        device_id;
-    cl_platform_id        platform_id;
-    cl_command_queue    command_queue;
-    size_t                num_of_globals;
-    size_t                num_of_locals;
-    FILE*                fp;
+    size_t size;
+    cl_uint tmp;
+    cl_ulong utmp;
+    cl_uint num_devices;
     
-    // 1. allocate host memory for matrices A and B
-    unsigned int size_A = WA * HA;
-    unsigned int mem_size_A = sizeof(float) * size_A;
-    float* h_A = (float*) malloc(mem_size_A);
-    
-    unsigned int size_B = WB * HB;
-    unsigned int mem_size_B = sizeof(float) * size_B;
-    float* h_B = (float*) malloc(mem_size_B);
-    
-    // 2. initialize host memory
-    //randomInit(h_A, size_A);
-    //randomInit(h_B, size_B);
-    identityMultipliedByCoeff(h_A, WA, 12.0);
-    identityMultipliedByCoeff(h_B, WB, -9.0);
-    
-    // 4. allocate host memory for the result C
-    unsigned int size_C = WC * HC;
-    unsigned int mem_size_C = sizeof(float) * size_C;
-    float* h_C = (float*) malloc(mem_size_C);
-    
-    fp = fopen( "/Users/lukaszwojcik/Development/opencl-matrix-multiplication/opencl-matrix-multiplication/matrix_mul_kernel.cl", "r");
-    if (fp)
-    {
-        fseek(fp, 0, SEEK_END);
-        source_size = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-        source_buf = (char*)malloc(source_size);
-        fread(source_buf, 1, source_size, fp);
-        fclose(fp);
+    // Device info.
+    ret = clGetPlatformInfo(platform, CL_PLATFORM_NAME, 1024, str, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Platform name      : " << str << std::endl;
     } else {
-        fprintf(stderr, "Failed to load kernel.\n");
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, num_entries, &device, &num_devices);
+    CHECK_STATUS(ret, "Error: getting device id");
+    cl_device_type t;
+    ret = clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(t), &t, &size);
+    if (ret == CL_SUCCESS) {
+        if (t == CL_DEVICE_TYPE_CPU) {
+            std::cout << "Device type        : CPU" << std::endl;
+        }
+        if (t == CL_DEVICE_TYPE_GPU) {
+            std::cout << "Device type        : GPU" << std::endl;
+        }
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(tmp), &tmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Number of units    : " << tmp << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(utmp), &utmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Max. memory alloc. : " << utmp / (1024 * 1024) << " MB" << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(utmp), &utmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Global mem. size   : " << utmp / (1024 * 1024) << " MB" << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(tmp), &tmp, &size);
+    if (ret == CL_SUCCESS) {
+        std::cout << "Clock frequency    : " << tmp << " MHz " << std::endl;
+    } else {
+        printf("Error: getting platfotm info \n");
+    }
+    
+    //----------------------------------------------------------------
+    // creating context and Command Queue
+    //----------------------------------------------------------------
+    cl_context context;
+    context = clCreateContext(NULL, num_devices, &device, NULL, NULL, &ret);
+    
+    CHECK_STATUS( ret, "Error: in Creating Context \n");
+    
+    // creating command queue
+    cl_command_queue cq;
+    
+    cq = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &ret);
+    
+    CHECK_STATUS (ret , "Error: in Creating command Queue \n");
+    
+    cl_event event;
+    
+    //------------------------------------------------------------------------------
+    // Load the kernel, creating the program, Build the program and create
+    //-------------------------------------------------------------------------------
+    FILE *fp;
+    char *source_str;
+    size_t source_size;
+    
+    fp = fopen("mm_kernel.cl", "r");
+    if (!fp)
+    {
+        fprintf(stderr, "Failed to load the kernel \n");
         exit(1);
     }
-    // Data prepare
-    for (int i = 0; i<N; i++)
-    {
-        h_buf1[i] = (float)i;
-        h_buf2[i] = (float)(N - i);
-    }
-    // Init
-    checkCL(clGetPlatformIDs(1, &platform_id, &num_platforms));
-    // Platform info.
-    checkCL(clGetPlatformInfo(platform_id, CL_PLATFORM_NAME, 1024, str, &size));
-    cout << "Platform name      : " << str << endl;
-    // Device info.
-    clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 2, &device_id, &num_devices);
-    cl_device_type t;
-    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_TYPE, sizeof(t), &t, &size));
-    if (t == CL_DEVICE_TYPE_CPU)
-    {
-        cout << "Device type        : CPU" << endl;
-    }
-    if (t == CL_DEVICE_TYPE_GPU)
-    {
-        cout << "Device type        : GPU" << endl;
-    }
-    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(tmp), &tmp, &size));
-    cout << "Number of units    : " << tmp << endl;
-    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(utmp), &utmp, &size));
-    cout << "Max. memory alloc. : " << utmp / (1024 * 1024) << " MB" << endl;
-    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(utmp), &utmp, &size));
-    cout << "Global mem. size   : " << utmp / (1024 * 1024) << " MB" << endl;
-    checkCL(clGetDeviceInfo(device_id, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(tmp), &tmp, &size));
-    cout << "Clock frequency    : " << tmp << " MHz " << endl;
-    // ---
-    context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
-    checkCL(ret);
-    command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
-    checkCL(ret);
-    mem1 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, mem_size_A, h_A, &ret);
-    checkCL(ret);
-    mem2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, mem_size_B, h_B, &ret);
-    checkCL(ret);
-    mem3 = clCreateBuffer(context, CL_MEM_READ_WRITE, mem_size_C, NULL, &ret);
-    checkCL(ret);
-    program = clCreateProgramWithSource(context, 1, (const char**)&source_buf, (const size_t*)&source_size, &ret);
-    checkCL(ret);
-    checkCL(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
-    kernel = clCreateKernel(program, "matrixMul", &ret);
-    checkCL(ret);
-    // Arguments
-    int wA = WA;
-    int wB = WB;
-    int wC = WC;
-    checkCL(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&mem1));
-    checkCL(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&mem2));
-    checkCL(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&mem3));
-    checkCL(clSetKernelArg(kernel, 3, sizeof(int), (void *)&wA));
-    checkCL(clSetKernelArg(kernel, 4, sizeof(int), (void *)&wC));
-    // Start kernel
-    num_of_locals = 16;
-    num_of_globals = 1024;
-    checkCL(clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &num_of_globals, &num_of_locals, 0, NULL, &time_event));
-    /*checkCL(clWaitForEvents(1, &time_event));
-    checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL));
-    checkCL(clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL));
-    cout << "TT                 : " << (time_end - time_start) / 1000 << " us" << endl;
-    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0,  mem_size_C, h_C, 0, NULL, NULL));
-    for (int j = 0; j < N; j++) {
-        printf("%f + %f = %f\n", h_buf1[j], h_buf2[j], h_buf3[j]);
-    }
-    */
+    source_str = (char*)malloc(MAX_SOURCE_SIZE);
+    source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
+    fclose (fp);
     
-    // 8. Retrieve result from device
-    checkCL(clEnqueueReadBuffer(command_queue, mem3, CL_TRUE, 0,  mem_size_C, h_C, 0, NULL, NULL));
     
-    // We must check the result
-    for (int i = 0; i < WA; i++)
+    // creating a program with source
+    cl_program program;
+    //fprintf (stderr, "%s",source_str);
+    program = clCreateProgramWithSource(context, 1, (const char **) &source_str,
+                                        (const size_t *) &source_size, &ret);
+    
+    CHECK_STATUS(ret, "Error: in Creating The program \n");
+    
+    //Building the OpenCL program
+    ret = clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    
+    CHECK_STATUS(ret,"Error: in Building The program \n");
+    
+    //creating the Kernel
+    cl_kernel kernel;
+    kernel = clCreateKernel(program, "matrix_mul", &ret);
+    
+    CHECK_STATUS(ret, "Error: in Creating The Kernel \n");
+    
+    //----------------------------------------------------------------------
+    /* OpenCL buffers */
+    //---------------------------------------------------------------------
+    
+    // creating the buffer in the HOST,
+    size_t dim =  numData;
+    size_t ldim = 8; // for GPU best: 8 CPU: 1
+    const size_t num_elem = dim*dim; //size of element
+    cl_int *A_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
+    cl_int *B_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
+    cl_int *C_host = (cl_int*)malloc(sizeof(cl_int) * num_elem);
+    
+    // initiating source buffer in host
+    cl_int i ;
+    for (i = 0; i< num_elem; i++)
     {
-        for (int j = 0; j < WA; j++)
-        {
-            float prod = 0;
-            for (int k = 0; k < WA;k++)
-            {
-                prod += h_A[i*WA + k] * h_B[k*WA + j];
-            }
-            if (fabs(h_C[i*WA+j] - prod) > 0.01)
-            {
-                printf("The indices where the comparison failed, i = %d, j = %d\n", i,j);
-                printf("C[i*WA+j] should equal %f\n", prod);
-                printf("C[i*WA+j] = %f\n", h_C[i*WA + j]);
-                perror("The matrix check has failed");
-                exit(1);
-                break;
-            }
-        }
+        A_host[i] = i;
+        B_host[i] = i;
     }
-    printf("The matrix check has been successfull!\n");
     
-    // Finish
-    free(h_A);
-    free(h_B);
-    free(h_C);
-    checkCL(clFlush(command_queue));
-    checkCL(clFinish(command_queue));
-    checkCL(clReleaseKernel(kernel));
-    checkCL(clReleaseProgram(program));
-    checkCL(clReleaseMemObject(mem1));
-    checkCL(clReleaseMemObject(mem2));
-    checkCL(clReleaseMemObject(mem3));
-    checkCL(clReleaseCommandQueue(command_queue));
-    checkCL(clReleaseContext(context));
-    free(source_buf);
-    return 0;
+    // allocating source buffer in GPU
+    cl_mem A_device ;
+    cl_mem B_device ;
+    cl_mem C_device ;
+    A_device = clCreateBuffer(context, CL_MEM_READ_ONLY,
+                              num_elem*sizeof(cl_int), NULL, &ret);
+    if (ret != CL_SUCCESS)    printf("Error: in allocating buffer A in GPU \n");
+    
+    B_device = clCreateBuffer(context, CL_MEM_READ_ONLY,
+                              num_elem*sizeof(cl_int), NULL, &ret);
+    if (ret != CL_SUCCESS)    printf("Error: in allocating buffer B in GPU \n");
+    
+    C_device =  clCreateBuffer(context, CL_MEM_WRITE_ONLY,
+                               num_elem*sizeof(cl_int), NULL, &ret);
+    if (ret != CL_SUCCESS)    printf("Error: in allocating buffer C in GPU \n");
+    
+    // copy source buffer into GPU
+    ret = clEnqueueWriteBuffer (cq, A_device, CL_TRUE, 0, num_elem *sizeof(cl_int),
+                                A_host, 0, 0, &event );
+    
+    CHECK_STATUS(ret ,"Error: in copying source buffer into GPU \n");
+    
+    ret = clEnqueueWriteBuffer (cq, B_device, CL_TRUE, 0, num_elem *sizeof(cl_int),
+                                B_host, 0, 0, &event );
+    
+    CHECK_STATUS(ret ,"Error: in copying source buffer into GPU \n");
+    
+    // setting the arguments
+    ret = clSetKernelArg( kernel, 0, sizeof (cl_mem), &A_device); // 0 indicates the first argument
+    if (ret != CL_SUCCESS)    printf("Error: setting the first argument \n");
+    
+    ret = clSetKernelArg( kernel, 1, sizeof (cl_mem), &B_device); // 1 indicates the second argument
+    if (ret != CL_SUCCESS)    printf("Error: setting the second argument \n");
+    
+    ret = clSetKernelArg( kernel, 2, sizeof (cl_mem), &C_device); // 2 indicates the third argument
+    if (ret != CL_SUCCESS)    printf("Error: setting the third argument \n");
+    
+    ret = clSetKernelArg( kernel, 3, sizeof (cl_int)* ldim*ldim, NULL); // 3 indicates the forth argument
+    if (ret != CL_SUCCESS)    printf("Error: setting the forth argument \n");
+    
+    ret = clSetKernelArg( kernel, 4, sizeof (cl_int)* ldim*ldim, NULL); // 4 indicates the fifth argument
+    if (ret != CL_SUCCESS)    printf("Error: setting the fifth argument \n");
+    
+    // main function for launching the kernel
+    cl_uint dimension = 2;
+    size_t global_work_size[2] = {dim, dim};
+    size_t local_work_size[2] = {ldim, ldim};
+    ret = clEnqueueNDRangeKernel(cq, kernel, dimension , NULL, global_work_size, local_work_size,
+                                  0, NULL, &event);
+    if (ret != CL_SUCCESS) {
+        printf("Error: Launching Kernel \n");
+    } else {
+        // measure time
+        cl_ulong            time_end;
+        cl_ulong            time_start;
+        ret = clWaitForEvents(1, &event);
+        if (ret != CL_SUCCESS)    printf("Error: Waiting events \n");
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
+        std::cout << "\nComputation time   : " << (time_end - time_start) / 1000 << " us" << std::endl;
+    }
+    
+    // finish the execution
+    ret = clFlush(cq);
+    ret = clFinish(cq);
+    
+    if (ret != CL_SUCCESS)    printf("Error: Finishing the execution \n");
+    
+    //--------------------------------------------------------------------------
+    /* Obtain the result from GPU to the CPU */
+    //--------------------------------------------------------------------------
+    
+    // retrieving the buffer
+    ret = clEnqueueReadBuffer (cq, C_device, CL_TRUE, 0, num_elem * sizeof(cl_int),
+                               C_host, 0, NULL, &event);
+    if (ret != CL_SUCCESS)    printf("Error: retrieving DST buffer into CPU \n");
+    
+    // Display the result to the screen
+    
+//    int j = 0;
+//    for(i = 0; i < dim; i++)
+//    {
+//    for (j = 0; j < dim ; j++)
+//    printf("A[%d.%d] = %d \t", A_host[i], A_host[j], A_host[i*dim+j]);
+//    printf("\n");
+//    }
+//    printf("\n--------------------------------------------------------\n");
+//    for(i = 0; i < dim; i++)
+//    {
+//    for (j = 0; j < dim ; j++)
+//    printf("C[%d.%d] = %d \t", A_host[i], B_host[j], C_host[i*dim+j]);
+//    printf("\n");
+//    }
+    
+    fflush(NULL);
+    ret = clReleaseKernel(kernel);
+    ret = clReleaseProgram(program);
+    ret = clReleaseMemObject(A_device);
+    ret = clReleaseMemObject(B_device);
+    ret = clReleaseMemObject(C_device);
+    ret = clReleaseCommandQueue(cq);
+    ret = clReleaseContext(context);
+    
+    fflush(NULL);
+
+    return(0);
 }
